@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "442236215805",
-    "project_id": "mama-taxi-62aa7",
-    "storage_bucket": "mama-taxi-62aa7.firebasestorage.app"
+    "project_number": "839294363369",
+    "project_id": "mama-taxi-8ec61",
+    "storage_bucket": "mama-taxi-8ec61.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:442236215805:android:e6be31945f6a3982b5f994",
+        "mobilesdk_app_id": "1:839294363369:android:b41285ec900467f87ff278",
         "android_client_info": {
           "package_name": "com.example.mama_taxi"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCRDeccYoVRg67hOvZTPNoOSfagybPKsFU"
+          "current_key": "AIzaSyByJudIAAgL0PEueRAnlgOWQb4nkXCaX-s"
         }
       ],
       "services": {

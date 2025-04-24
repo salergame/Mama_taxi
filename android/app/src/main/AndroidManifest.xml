@@ -1,16 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
     <application
         android:label="Мама Такси"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAPbtO3t20UTgn_9L87YLHiBnOoMtZJ3YY"/>
+           android:name="com.google.android.geo.API_KEY"
+           android:value="AIzaSyAPbtO3t20UTgn_9L87YLHiBnOoMtZJ3YY"/>
+        <meta-data
+            android:name="com.google.android.maps.v2.LOCALE"
+            android:value="ru_RU" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -45,7 +51,4 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 </manifest>

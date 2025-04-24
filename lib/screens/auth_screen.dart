@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:mama_taxi/screens/otp_screen.dart';
 import 'package:mama_taxi/services/auth_service.dart';
+import 'package:mama_taxi/providers/user_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:mama_taxi/screens/home_screen.dart';
+import 'package:mama_taxi/screens/driver_home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({Key? key}) : super(key: key);
@@ -11,10 +14,17 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
+  bool _isSignUp = false;
+  bool _obscurePassword = true;
   String _errorMessage = '';
+  bool _isDriverMode = false;
 
   @override
   void initState() {
@@ -25,6 +35,8 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void dispose() {
     _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -32,29 +44,44 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _checkAuth() async {
     final isAuthenticated = await _authService.isUserAuthenticated();
     if (isAuthenticated && mounted) {
-      _navigateToHome();
+      print('Пользователь авторизован, проверяем данные профиля');
+      // Проверяем, заполнен ли профиль
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      await userProvider.initUser();
+
+      // Если пользователь есть и профиль заполнен, идем на главную страницу
+      if (userProvider.user != null &&
+          userProvider.user!.name != null &&
+          userProvider.user!.name!.isNotEmpty) {
+        print('Профиль заполнен, переходим на главную');
+        _navigateToHome();
+      } else if (userProvider.user != null) {
+        // Если пользователь есть, но профиль не заполнен
+        print('Профиль не заполнен, переходим к редактированию профиля');
+        Navigator.of(context).pushReplacementNamed('/profile_edit');
+      }
     }
   }
 
   // Переход на главный экран
-  void _navigateToHome() {
+  void _navigateToHome() async {
     Navigator.of(context).pushReplacementNamed('/home');
   }
 
-  // Обработка нажатия на кнопку продолжить
-  Future<void> _handleContinue() async {
-    // Получаем номер телефона из контроллера
-    final phoneNumber = _phoneController.text.trim();
+  // Метод для кнопки "Продолжить без регистрации"
+  void _continueWithoutRegistration() {
+    // Перенаправляем на главный экран вместо профиля
+    Navigator.pushReplacementNamed(context, '/home');
+  }
 
-    if (phoneNumber.isEmpty) {
-      setState(() {
-        _errorMessage = 'Введите номер телефона';
-      });
+  // Обработка нажатия на кнопку входа/регистрации
+  Future<void> _handleSubmit() async {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    // Форматируем номер телефона
-    final formattedPhone = '+7 $phoneNumber';
+    // Скрываем клавиатуру
+    FocusScope.of(context).unfocus();
 
     setState(() {
       _isLoading = true;
@@ -62,31 +89,45 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // Отправляем запрос на верификацию
-      await _authService.verifyPhoneNumber(
-        formattedPhone,
-        (verificationId) {
-          setState(() {
-            _isLoading = false;
-          });
-          // Переход на экран ввода OTP
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => OtpScreen(
-                phoneNumber: formattedPhone,
-                verificationId: verificationId,
-              ),
-            ),
-          );
-        },
-        (error) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = error;
-          });
-        },
-      );
+      bool success;
+
+      // Временно для демо: используем email="demo@mail.ru", пароль="123456"
+      final email = "demo@mail.ru";
+      final password = "123456";
+
+      if (_isSignUp) {
+        // Регистрация нового пользователя
+        success = await _authService.registerWithEmailAndPassword(
+            email, password,
+            isDriver: _isDriverMode);
+      } else {
+        // Вход существующего пользователя
+        success =
+            await _authService.signInWithEmailAndPassword(email, password);
+      }
+
+      if (success && mounted) {
+        final isDriver = await _authService.isUserDriver();
+
+        if (_isSignUp) {
+          // Если это новая регистрация - переходим на заполнение профиля
+          Navigator.pushReplacementNamed(context, '/profile_edit');
+        } else {
+          // Если вход - проверяем тип пользователя и переходим на соответствующий экран
+          if (isDriver) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (context) => const DriverHomeScreen()),
+            );
+          } else {
+            _navigateToHome();
+          }
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'Ошибка авторизации. Проверьте введенные данные.';
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -95,10 +136,27 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  // Авторизация через соц. сети
-  void _handleSocialLogin() {
-    // В демо-режиме просто переходим на главный экран
-    _navigateToHome();
+  void _switchMode() {
+    setState(() {
+      _isSignUp = !_isSignUp;
+      _errorMessage = '';
+    });
+  }
+
+  void _switchUserType() {
+    setState(() {
+      _isDriverMode = !_isDriverMode;
+    });
+  }
+
+  String? _validatePhone(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Пожалуйста, введите номер телефона';
+    }
+    if (!RegExp(r'^\(\d{3}\) \d{3}-\d{2}-\d{2}$').hasMatch(value)) {
+      return 'Формат: (999) 123-45-67';
+    }
+    return null;
   }
 
   @override
@@ -172,180 +230,193 @@ class _AuthScreenState extends State<AuthScreen> {
                         topRight: Radius.circular(32),
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Заголовок "Вход в систему"
-                        const Center(
-                          child: Text(
-                            'Вход в систему',
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Заголовок "Вход в систему"
+                          Center(
+                            child: Text(
+                              'Вход в систему',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                color: Color(0xFF1F2937),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 32),
+
+                          // Метка "Номер телефона"
+                          const Text(
+                            'Номер телефона',
                             style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w400,
-                              color: Color(0xFF1F2937),
+                              fontSize: 14,
+                              color: Color(0xFF4B5563),
                             ),
                           ),
-                        ),
 
-                        const SizedBox(height: 32),
+                          const SizedBox(height: 8),
 
-                        // Поле ввода номера телефона
-                        const Text(
-                          'Номер телефона',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF4B5563),
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: const Color(0xFFFFABBA),
-                              width: 1,
+                          // Поле ввода телефона
+                          Container(
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF9FAFB),
+                              border: Border.all(
+                                color: const Color(0xFFFFABBA),
+                                width: 1,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ),
-                          child: TextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            decoration: const InputDecoration(
-                              contentPadding: EdgeInsets.symmetric(
-                                  vertical: 13, horizontal: 13),
-                              border: InputBorder.none,
-                              prefixIcon: Padding(
-                                padding: EdgeInsets.only(left: 13, right: 5),
-                                child: Text(
+                            child: Row(
+                              children: [
+                                const SizedBox(width: 13),
+                                const Text(
                                   '+7',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Color(0xFF6B7280),
                                   ),
                                 ),
-                              ),
-                              prefixIconConstraints:
-                                  BoxConstraints(minWidth: 0, minHeight: 0),
-                              hintText: '(999) 123-45-67',
-                              hintStyle: TextStyle(
-                                fontSize: 16,
-                                color: Color(0xFFADAEBC),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        if (_errorMessage.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              _errorMessage,
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-
-                        const SizedBox(height: 24),
-
-                        // Кнопка "Продолжить"
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleContinue,
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _phoneController,
+                                    decoration: const InputDecoration(
+                                      hintText: '(999) 123-45-67',
+                                      hintStyle: TextStyle(
+                                        color: Color(0xFFADAEBC),
+                                        fontSize: 16,
+                                      ),
+                                      border: InputBorder.none,
                                     ),
-                                  )
-                                : const Text('Продолжить'),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Кнопка для регистрации водителя
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.pushNamed(context, '/driver_auth');
-                            },
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: Color(0xFF4FD8C4),
-                                width: 1,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.drive_eta_outlined,
-                                  color: Color(0xFF4FD8C4),
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Стать водителем',
-                                  style: TextStyle(
-                                    color: Color(0xFF4FD8C4),
-                                    fontSize: 16,
+                                    keyboardType: TextInputType.phone,
+                                    validator: _validatePhone,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
 
-                        const SizedBox(height: 32),
+                          const SizedBox(height: 32),
 
-                        // Разделитель "или войти через"
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Divider(
-                                color: Color(0xFFE5E7EB),
-                                thickness: 1,
+                          // Кнопка "Получить код"
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _handleSubmit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF654AA),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
                               ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Получить код',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                             ),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text(
-                                'или войти через',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade500,
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Разделитель "или войти через"
+                          Row(
+                            children: const [
+                              Expanded(
+                                child: Divider(
+                                  color: Color(0xFFE5E7EB),
+                                  thickness: 1,
                                 ),
                               ),
-                            ),
-                            const Expanded(
-                              child: Divider(
-                                color: Color(0xFFE5E7EB),
-                                thickness: 1,
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  'или войти через',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFF9CA3AF),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                              Expanded(
+                                child: Divider(
+                                  color: Color(0xFFE5E7EB),
+                                  thickness: 1,
+                                ),
+                              ),
+                            ],
+                          ),
 
-                        // Ссылка "Зарегистрироваться как водитель"
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          const SizedBox(height: 24),
+
+                          // Социальные кнопки
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                width: 103,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: const Color(0xFFE5E7EB),
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.language,
+                                    color: Colors.black),
+                              ),
+                              Container(
+                                width: 103,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: const Color(0xFFE5E7EB),
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.account_circle,
+                                    color: Colors.black),
+                              ),
+                              Container(
+                                width: 103,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: const Color(0xFFE5E7EB),
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.facebook,
+                                    color: Colors.black),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Разделитель "Зарегистрироваться как водитель"
+                          Row(
                             children: [
                               const Expanded(
                                 flex: 1,
@@ -355,11 +426,16 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ),
                               ),
                               Expanded(
-                                flex: 6,
+                                flex: 5,
                                 child: TextButton(
                                   onPressed: () {
+                                    // Переход на экран регистрации водителя
+                                    setState(() {
+                                      _isDriverMode = true;
+                                      _isSignUp = true;
+                                    });
                                     Navigator.pushNamed(
-                                        context, '/driver_auth');
+                                        context, '/auth_driver');
                                   },
                                   child: const Text(
                                     'Зарегистрироваться как водитель',
@@ -379,64 +455,8 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                             ],
                           ),
-                        ),
-
-                        // Кнопки соц. сетей
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _buildSocialButton(
-                              onPressed: _handleSocialLogin,
-                              svgPath: 'assets/icons/google.svg',
-                            ),
-                            _buildSocialButton(
-                              onPressed: _handleSocialLogin,
-                              svgPath: 'assets/icons/vk.svg',
-                            ),
-                            _buildSocialButton(
-                              onPressed: _handleSocialLogin,
-                              svgPath: 'assets/icons/telegram.svg',
-                            ),
-                          ],
-                        ),
-
-                        // Кнопка быстрого перехода на карту (для демо)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 16),
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: OutlinedButton(
-                              onPressed: _navigateToHome,
-                              style: OutlinedButton.styleFrom(
-                                side:
-                                    const BorderSide(color: Color(0xFF4FD8C4)),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.map,
-                                    color: Color(0xFF4FD8C4),
-                                    size: 20,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Перейти к карте',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Color(0xFF4FD8C4),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -444,28 +464,6 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSocialButton({
-    required VoidCallback onPressed,
-    required String svgPath,
-  }) {
-    return Container(
-      width: 103,
-      height: 48,
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: IconButton(
-        onPressed: onPressed,
-        icon: SvgPicture.asset(
-          svgPath,
-          width: 20,
-          height: 20,
-        ),
       ),
     );
   }

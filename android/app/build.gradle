@@ -27,12 +27,13 @@ android {
         applicationId = "com.example.mama_taxi"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders = [
-            'MAPS_API_KEY': 'AIzaSyBOycSDJy1RCQUJz0qp4FI9ElocwFoBSoc'
+            'MAPS_API_KEY': 'AIzaSyBOycSDJy1RCQUJz0qp4FI9ElocwFoBSoc',
+            'applicationName': 'io.flutter.app.FlutterApplication'
         ]
     }
 

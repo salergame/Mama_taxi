@@ -8,7 +8,12 @@ import GoogleMaps
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GMSServices.provideAPIKey("AIzaSyAUuoazcF4PULRDko7nH6VMynTMgU4VWyA")
+    GMSServices.provideAPIKey("AIzaSyAPbtO3t20UTgn_9L87YLHiBnOoMtZJ3YY")
+    // Устанавливаем русский язык для карт Google
+    GMSServices.setLenient(true)
+    if let languageID = Locale.preferredLanguages.first {
+      GMSServices.setPreferredLanguage("ru")
+    }
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
